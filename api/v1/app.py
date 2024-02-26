@@ -1,72 +1,39 @@
 #!/usr/bin/python3
-"""
-Flask App that integrates with AirBnB static HTML Template
-"""
-from api.v1.views import app_views
-from flask import Flask, jsonify, make_response, render_template, url_for
-from flask_cors import CORS, cross_origin
-from flasgger import Swagger
-from models import storage
+""" Creates an flask web service"""
+
+from flask import Flask, make_response, jsonify
 import os
-from werkzeug.exceptions import HTTPException
+from flask_cors import CORS
 
-# Global Flask Application Variable: app
+
+from models import storage
+from api.v1.views import app_views
+
 app = Flask(__name__)
-swagger = Swagger(app)
-
-# global strict slashes
+CORS(app, resources={"/api/*": {"origins": "0.0.0.0"}})
 app.url_map.strict_slashes = False
-
-# flask server environmental setup
-host = os.getenv('HBNB_API_HOST', '0.0.0.0')
-port = os.getenv('HBNB_API_PORT', 5000)
-
-# Cross-Origin Resource Sharing
-cors = CORS(app, resources={r'/*': {'origins': host}})
-
-# app_views BluePrint defined in api.v1.views
 app.register_blueprint(app_views)
 
 
-# begin flask page rendering
 @app.teardown_appcontext
-def teardown_db(exception):
-    """
-    after each request, this method calls .close() (i.e. .remove()) on
-    the current SQLAlchemy Session
-    """
+def tear_down(self):
+    """ removes the current SQLAlchemy session"""
     storage.close()
 
 
-@app.errorhandler(Exception)
-def global_error_handler(err):
-    """
-        Global Route to handle All Error Status Codes
-    """
-    if isinstance(err, HTTPException):
-        if type(err).__name__ == 'NotFound':
-            err.description = "Not found"
-        message = {'error': err.description}
-        code = err.code
-    else:
-        message = {'error': err}
-        code = 500
-    return make_response(jsonify(message), code)
+@app.errorhandler(404)
+def not_found(error):
+    return make_response(jsonify({"error": "Not found"}), 404)
 
 
-def setup_global_errors():
-    """
-    This updates HTTPException Class with custom error function
-    """
-    for cls in HTTPException.__subclasses__():
-        app.register_error_handler(cls, global_error_handler)
+@app.errorhandler(400)
+def bad_request(error):
+    return make_response(jsonify({'error': error.description}), 400)
 
 
 if __name__ == "__main__":
-    """
-    MAIN Flask App
-    """
-    # initializes global error handling
-    setup_global_errors()
-    # start Flask app
-    app.run(host=host, port=port)
+    if os.getenv("HBNB_API_HOST") and os.getenv("HBNB_API_PORT"):
+        app.run(host=os.getenv("HBNB_API_HOST"),
+                port=os.getenv("HBNB_API_PORT"), threaded=True)
+    else:
+        app.run(host='0.0.0.0', port=5000, threaded=True)
